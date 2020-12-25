@@ -93,9 +93,14 @@ class Board:
             plynow = {0: "w", 1: "b"}[len(self.history) % 2]
 
             # does making this move leave me in check?
-            chboard = self.make_move(candidate)
+            chboard = self.make_move(candidate, ignore_promote=True)
             if not chboard.is_positional_check(plynow):
-                yield candidate
+                if self[candidate[0]][1] == "p" and candidate[1][1] in "18":
+                    # pawn promotion
+                    for promote in "qbnr":
+                        yield (*candidate, promote)
+                else:
+                    yield candidate
 
     def _positional_moves(self, who=None):
         if who:
@@ -159,8 +164,8 @@ class Board:
                         else:
                             raise RuntimeError("unexpected element")
 
-    def make_move(self, fromto):
-        from_, to_ = fromto
+    def make_move(self, fromto, ignore_promote=False):
+        from_, to_, *promote = fromto
 
         plynow = {0: "w", 1: "b"}[len(self.history) % 2]
         pawn_dr = {"b": -1, "w": 1}[plynow]
@@ -170,7 +175,11 @@ class Board:
         piece = board.piecemap[from_]
         if piece[1] == "p" and board.enpassant and to_ == board.enpassant[0]:
             del board.piecemap[board.enpassant[1]]
-        board.piecemap[to_] = board.piecemap[from_]
+        if not ignore_promote and piece[1] == "p" and to_[1] in "18":
+            print(fromto)
+            # pawn promotion
+            piece = piece[0] + promote[0]
+        board.piecemap[to_] = piece
         del board.piecemap[from_]
         # record enpassant history
         if (
@@ -208,7 +217,7 @@ if __name__ == "__main__":
         print_board(board)
 
         who = {"w": "white", "b": "black"}[board.who()]
-        print(f"{who} to move")
+        print(f"{who} to move; move #{len(board.history)+1}")
         import time
 
         # time.sleep(.25)
