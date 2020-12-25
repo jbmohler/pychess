@@ -44,13 +44,13 @@ class Board:
         self.piecemap = piecemap
 
         self.enpassant = None
-        self.castle_x = {}
+        self.castle_x = set()
         self.history = []
 
     def _dupe(self):
         x = Board(self.piecemap.copy())
         x.enpassant = None
-        x.castle_x = {}
+        x.castle_x = self.castle_x.copy()
         x.history = self.history.copy()
         return x
 
@@ -74,7 +74,23 @@ class Board:
             if v[0] == color:
                 yield k, v
 
-    def next_moves(self):
+    def who(self):
+        return {0: "w", 1: "b"}[len(self.history) % 2]
+
+    def legal_moves(self):
+        for candidate in self._positional_moves():
+            plynow = {0: "w", 1: "b"}[len(self.history) % 2]
+
+            # does making this move leave me in check?
+            chboard = self.make_move(candidate)
+            king_spot = [s for s, p in self._positions(plynow) if p[1] == "k"][0]
+            for check in chboard._positional_moves():
+                if check[1] == king_spot:
+                    break
+            else:
+                yield candidate
+
+    def _positional_moves(self):
         plynow = {0: "w", 1: "b"}[len(self.history) % 2]
         plyother = {0: "b", 1: "w"}[len(self.history) % 2]
 
@@ -163,10 +179,12 @@ def print_board(board):
     files = "abcdefgh"
     cp = ChessPiece
     for r in ranks:
+        print(f"{r} ", end="")
         for f in files:
             # print(f"{f}{r}", end='')
             print(getattr(cp, board[f"{f}{r}"]), end="")
         print("\n", end="")
+    print(f"  {files}")
 
 
 if __name__ == "__main__":
@@ -174,15 +192,16 @@ if __name__ == "__main__":
     while True:
         print_board(board)
 
+        who = {"w": "white", "b": "black"}[board.who()]
+        print(f"{who} to move")
         import time
 
         time.sleep(3)
 
-        print("Next moves")
-        moves = list(board.next_moves())
+        moves = list(board.legal_moves())
         import random
 
-        # for from_, to_ in board.next_moves():
+        # for from_, to_ in board.legal_moves():
         #    print(from_, to_)
         move = random.choice(moves)
 
