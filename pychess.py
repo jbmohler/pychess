@@ -77,22 +77,33 @@ class Board:
     def who(self):
         return {0: "w", 1: "b"}[len(self.history) % 2]
 
+    @staticmethod
+    def other(who):
+        return {"w": "b", "b": "w"}[who]
+
+    def is_positional_check(self, who):
+        king_spot = [s for s, p in self._positions(who) if p[1] == "k"][0]
+        for check in self._positional_moves(Board.other(who)):
+            if check[1] == king_spot:
+                return True
+        return False
+
     def legal_moves(self):
         for candidate in self._positional_moves():
             plynow = {0: "w", 1: "b"}[len(self.history) % 2]
 
             # does making this move leave me in check?
             chboard = self.make_move(candidate)
-            king_spot = [s for s, p in self._positions(plynow) if p[1] == "k"][0]
-            for check in chboard._positional_moves():
-                if check[1] == king_spot:
-                    break
-            else:
+            if not chboard.is_positional_check(plynow):
                 yield candidate
 
-    def _positional_moves(self):
-        plynow = {0: "w", 1: "b"}[len(self.history) % 2]
-        plyother = {0: "b", 1: "w"}[len(self.history) % 2]
+    def _positional_moves(self, who=None):
+        if who:
+            plynow = who
+            plyother = Board.other(who)
+        else:
+            plynow = {0: "w", 1: "b"}[len(self.history) % 2]
+            plyother = {0: "b", 1: "w"}[len(self.history) % 2]
 
         d_straight = [Delta(0, 1), Delta(1, 0)]
         d_straight = [s for s in d_straight] + [s * -1 for s in d_straight]
@@ -162,7 +173,11 @@ class Board:
         board.piecemap[to_] = board.piecemap[from_]
         del board.piecemap[from_]
         # record enpassant history
-        if piece[1] == "p" and to_ == Delta(0, pawn_dr * 2).from_(from_):
+        if (
+            piece[1] == "p"
+            and from_[1] == ("2" if plynow == "w" else "7")
+            and to_ == Delta(0, pawn_dr * 2).from_(from_)
+        ):
             board.enpassant = (Delta(0, pawn_dr).from_(from_), to_)
         else:
             board.enpassant = None
@@ -196,9 +211,19 @@ if __name__ == "__main__":
         print(f"{who} to move")
         import time
 
-        time.sleep(3)
+        # time.sleep(.25)
 
         moves = list(board.legal_moves())
+        if len(moves) == 0:
+            other = {"w": "black", "b": "white"}[board.who()]
+            if board.is_positional_check(board.who()):
+                print(f"game over; {other} wins")
+            else:
+                print(f"game over; draw -- {who} has no legal moves")
+            break
+        elif len(board.piecemap) == 2:
+            print(f"game over; draw -- 2 kings")
+            break
         import random
 
         # for from_, to_ in board.legal_moves():
