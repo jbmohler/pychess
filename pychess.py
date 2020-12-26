@@ -216,12 +216,6 @@ if __name__ == "__main__":
     while True:
         print_board(board)
 
-        who = {"w": "white", "b": "black"}[board.who()]
-        print(f"{who} to move; move #{len(board.history)+1}")
-        import time
-
-        # time.sleep(.25)
-
         moves = list(board.legal_moves())
         if len(moves) == 0:
             other = {"w": "black", "b": "white"}[board.who()]
@@ -233,6 +227,13 @@ if __name__ == "__main__":
         elif len(board.piecemap) == 2:
             print(f"game over; draw -- 2 kings")
             break
+
+        who = {"w": "white", "b": "black"}[board.who()]
+        print(f"{who} to move; move #{len(board.history)+1}")
+        import time
+
+        # time.sleep(.25)
+
         import random
 
         # for from_, to_ in board.legal_moves():
