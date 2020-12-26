@@ -81,12 +81,15 @@ class Board:
     def other(who):
         return {"w": "b", "b": "w"}[who]
 
-    def is_positional_check(self, who):
-        king_spot = [s for s, p in self._positions(who) if p[1] == "k"][0]
-        for check in self._positional_moves(Board.other(who)):
-            if check[1] == king_spot:
+    def is_attacked(self, spot, who):
+        for check in self._positional_moves(who):
+            if check[1] == spot:
                 return True
         return False
+
+    def is_positional_check(self, who):
+        king_spot = [s for s, p in self._positions(who) if p[1] == "k"][0]
+        return self.is_attacked(king_spot, Board.other(who))
 
     def legal_moves(self):
         for candidate in self._positional_moves():
@@ -164,6 +167,34 @@ class Board:
                         else:
                             raise RuntimeError("unexpected element")
 
+                k_spot = {"w": "e1", "b": "e8"}[plynow]
+                if piece[1] == "k" and spot == k_spot and spot not in self.castle_x:
+                    # king side
+                    d1 = Delta(1, 0)
+                    lineup = [(d1 * i).from_(spot) for i in range(4)]
+                    if (
+                        self[lineup[-1]][1] == "r"
+                        and lineup[-1] not in self.castle_x
+                        and set([self[smid] for smid in lineup[1:-1]]) == {"empty"}
+                    ):
+                        if not any(
+                            self.is_attacked(smid, plyother) for smid in lineup[:3]
+                        ):
+                            yield (spot, lineup[2])
+
+                    # queen side
+                    d1 = Delta(-1, 0)
+                    lineup = [(d1 * i).from_(spot) for i in range(5)]
+                    if (
+                        self[lineup[-1]][1] == "r"
+                        and lineup[-1] not in self.castle_x
+                        and set([self[smid] for smid in lineup[1:-1]]) == {"empty"}
+                    ):
+                        if not any(
+                            self.is_attacked(smid, plyother) for smid in lineup[:3]
+                        ):
+                            yield (spot, lineup[2])
+
     def make_move(self, fromto, ignore_promote=False):
         from_, to_, *promote = fromto
 
@@ -173,10 +204,18 @@ class Board:
         board = self._dupe()
         # make the move
         piece = board.piecemap[from_]
+        k_spot = {"w": "e1", "b": "e8"}[plynow]
+        if piece[1] == "k" and from_ == k_spot:
+            # move rook for castling if moving 2 to left or right
+            if to_[0] == "g":
+                board.piecemap[f"f{to_[1]}"] = board.piecemap[f"h{to_[1]}"]
+                del board.piecemap[f"h{to_[1]}"]
+            if to_[0] == "c":
+                board.piecemap[f"d{to_[1]}"] = board.piecemap[f"a{to_[1]}"]
+                del board.piecemap[f"a{to_[1]}"]
         if piece[1] == "p" and board.enpassant and to_ == board.enpassant[0]:
             del board.piecemap[board.enpassant[1]]
         if not ignore_promote and piece[1] == "p" and to_[1] in "18":
-            print(fromto)
             # pawn promotion
             piece = piece[0] + promote[0]
         board.piecemap[to_] = piece
@@ -192,7 +231,7 @@ class Board:
             board.enpassant = None
         # record castling history
         if from_ in Board.CASTLE_SPOTS and from_ not in self.castle_x:
-            self.castle_x.add(from_)
+            board.castle_x.add(from_)
         # record this move
         board.history.append(fromto)
         return board
@@ -216,6 +255,7 @@ if __name__ == "__main__":
     while True:
         print_board(board)
 
+        who = {"w": "white", "b": "black"}[board.who()]
         moves = list(board.legal_moves())
         if len(moves) == 0:
             other = {"w": "black", "b": "white"}[board.who()]
@@ -225,10 +265,9 @@ if __name__ == "__main__":
                 print(f"game over; draw -- {who} has no legal moves")
             break
         elif len(board.piecemap) == 2:
-            print(f"game over; draw -- 2 kings")
+            print("game over; draw -- 2 kings")
             break
 
-        who = {"w": "white", "b": "black"}[board.who()]
         print(f"{who} to move; move #{len(board.history)+1}")
         import time
 
