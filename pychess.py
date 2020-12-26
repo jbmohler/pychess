@@ -87,7 +87,7 @@ class Board:
         return {"w": "b", "b": "w"}[who]
 
     def is_attacked(self, spot, who):
-        for check in self._positional_moves(who):
+        for check in self._positional_moves(who, attacking=spot):
             if check[1] == spot:
                 return True
         return False
@@ -110,7 +110,7 @@ class Board:
                 else:
                     yield candidate
 
-    def _positional_moves(self, who=None):
+    def _positional_moves(self, who=None, attacking=None):
         if who:
             plynow = who
             plyother = Board.other(who)
@@ -173,7 +173,12 @@ class Board:
                             raise RuntimeError("unexpected element")
 
                 k_spot = {"w": "e1", "b": "e8"}[plynow]
-                if piece[1] == "k" and spot == k_spot and spot not in self.castle_x:
+                if (
+                    piece[1] == "k"
+                    and spot == k_spot
+                    and spot not in self.castle_x
+                    and (attacking == None or attacking[1] == k_spot[1])
+                ):
                     # king side
                     d1 = Delta(1, 0)
                     lineup = [(d1 * i).from_(spot) for i in range(4)]
