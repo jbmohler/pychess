@@ -17,6 +17,11 @@ class ChessPiece:
 
 
 class Delta:
+    f2i = {c: ord(c) - ord("a") for c in "abcdefgh"}
+    r2i = {c: ord(c) - ord("1") for c in "12345678"}
+    i2f = {i: chr(i + ord("a")) for i in range(8)}
+    i2r = {i: chr(i + ord("1")) for i in range(8)}
+
     def __init__(self, df, dr):
         self._t = (df, dr)
 
@@ -27,12 +32,12 @@ class Delta:
         return f"Delta{self._t}"
 
     def from_(self, spot):
-        f, r = ord(spot[0]) - ord("a"), ord(spot[1]) - ord("1")
-        assert 0 <= f < 8 and 0 <= r < 8
+        f, r = Delta.f2i[spot[0]], Delta.r2i[spot[1]]
+        # assert 0 <= f < 8 and 0 <= r < 8
         f += self._t[0]
         r += self._t[1]
         if 0 <= f < 8 and 0 <= r < 8:
-            return f"{chr(f+ord('a'))}{chr(r+ord('1'))}"
+            return f"{Delta.i2f[f]}{Delta.i2r[r]}"
         else:
             raise IndexError(f"{spot} offset {self._t} is out of bounds")
 
