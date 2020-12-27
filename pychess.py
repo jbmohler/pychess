@@ -62,7 +62,7 @@ class Board:
 
     def _dupe(self):
         x = Board(self.piecemap.copy())
-        x.enpassant = None
+        x.enpassant = self.enpassant
         x.castle_x = self.castle_x.copy()
         x.history = self.history.copy()
         return x
@@ -152,7 +152,8 @@ class Board:
                                 if self[spot2] == "empty":
                                     yield (spot, spot2)
                     else:
-                        if self[spot2][0] == plyother or spot2 == self.enpassant:
+                        eptarget = None if not self.enpassant else self.enpassant[0]
+                        if self[spot2][0] == plyother or spot2 == eptarget:
                             yield (spot, spot2)
             else:
                 dirs = {
@@ -265,24 +266,32 @@ class Board:
             # queen side
             result = (f"e{backrank}", f"c{backrank}")
         else:
-            m = re.match("([RNBQK]|)([a-h]?[0-8]?)(x|)([a-h][1-8])([+!?]*)", pgn)
+            m = re.match(
+                "([RNBQK]|)([a-h]?[0-8]?)(x|)([a-h][1-8])(=[QRNB]|)([+!?]*)", pgn
+            )
 
             ptype = m.group(1)
             spot1 = m.group(2)  # possibly empty
             capture = m.group(3)
             spot2 = m.group(4)
-            comment = m.group(5)
+            promotion = m.group(5)
+            comment = m.group(6)
 
             if ptype == "":
                 ptype = "p"
             else:
                 ptype = ptype.lower()
+            promotion = promotion[1].lower() if promotion else None
 
             potential = [
                 spot for spot, piece in self._positions(who) if piece[1] == ptype
             ]
 
-            matches = [(sp1, spot2) for sp1 in potential if (sp1, spot2) in moves]
+            if promotion:
+                target = (spot2, promotion)
+            else:
+                target = (spot2,)
+            matches = [(sp1, *target) for sp1 in potential if (sp1, *target) in moves]
 
             if spot1 != "":
                 matches = [m for m in matches if spot1 in m[0]]
