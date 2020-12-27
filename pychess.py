@@ -1,3 +1,7 @@
+import re
+import argparse
+
+
 class ChessPiece:
     wk = "\u2654"
     wq = "\u2655"
@@ -14,6 +18,10 @@ class ChessPiece:
     empty = " "
 
     backfile = "rnbqkbnr"
+
+
+class InterpretationError(Exception):
+    pass
 
 
 class Delta:
@@ -246,6 +254,48 @@ class Board:
         board.history.append(fromto)
         return board
 
+    def interpret(self, who, pgn):
+        moves = list(self.legal_moves())
+        backrank = {"w": "1", "b": "8"}[who]
+
+        if pgn == "O-O":
+            # king side
+            result = (f"e{backrank}", f"g{backrank}")
+        elif pgn == "O-O-O":
+            # queen side
+            result = (f"e{backrank}", f"c{backrank}")
+        else:
+            m = re.match("([RNBQK]|)([a-h]?[0-8]?)(x|)([a-h][1-8])([+!?]*)", pgn)
+
+            ptype = m.group(1)
+            spot1 = m.group(2)  # possibly empty
+            capture = m.group(3)
+            spot2 = m.group(4)
+            comment = m.group(5)
+
+            if ptype == "":
+                ptype = "p"
+            else:
+                ptype = ptype.lower()
+
+            potential = [
+                spot for spot, piece in self._positions(who) if piece[1] == ptype
+            ]
+
+            matches = [(sp1, spot2) for sp1 in potential if (sp1, spot2) in moves]
+
+            if spot1 != "":
+                matches = [m for m in matches if spot1 in m[0]]
+
+            if len(matches) == 1:
+                result = matches[0]
+            else:
+                raise InterpretationError(f"there are {len(matches)}: {matches}")
+
+        if result not in moves:
+            raise InterpretationError(f"move {result} is not valid on this board")
+        return result
+
 
 def print_board(board):
     ranks = "87654321"
@@ -260,7 +310,68 @@ def print_board(board):
     print(f"  {files}")
 
 
-if __name__ == "__main__":
+class PgnGame:
+    def __init__(self, headlines, gamelines):
+        self.game = " ".join(gamelines)
+        self.headlines = headlines
+
+    def plies(self):
+        ply = 0
+        game = self.game.split(" ")
+        for token in game:
+            if token.endswith("."):
+                ply += 1
+                assert ply == int(token[:-1])
+                bw = "w"
+            elif token in ("1-0", "0-1", "1/2-1/2"):
+                yield (ply, "-", token)
+            else:
+                yield (ply, bw, token)
+                bw = Board.other(bw)
+
+
+def parse_pgn(fname):
+    with open(fname, "r") as ff:
+        lines = [ll.strip() for ll in ff]
+
+    games = []
+    headmode = None
+    gamelines = []
+    headlines = []
+    for line in lines:
+        if line.startswith("["):
+            headmode = True
+            headlines.append(line)
+        elif line == "":
+            if headmode == False:
+                games.append(PgnGame(headlines, gamelines))
+                headlines = []
+                gamelines = []
+                headmode = None
+            elif headmode == True:
+                headmode = False
+        else:
+            gamelines.append(line)
+    return games
+
+
+def play_pgn_game(game):
+    print(game.headlines)
+    # input("play game?  (enter)")
+    board = Board.default_board()
+    for ply in game.plies():
+        print_board(board)
+
+        if ply[1] == "-":
+            print(f"game over: {ply[2]}")
+            break
+        print(ply)
+        move = board.interpret(ply[1], ply[2])
+
+        board = board.make_move(move)
+
+
+def random_game():
     board = Board.default_board()
     while True:
         print_board(board)
@@ -290,3 +401,17 @@ if __name__ == "__main__":
         move = random.choice(moves)
 
         board = board.make_move(move)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Process some integers.")
+    parser.add_argument("--pgn", help="filename with pgn format games")
+    parser.add_argument("--game", help="game index to play of pgn file")
+
+    args = parser.parse_args()
+    if args.pgn:
+        games = parse_pgn(args.pgn)
+
+        play_pgn_game(games[int(args.game) - 1])
+    else:
+        random_game()
