@@ -1,5 +1,6 @@
 import re
 import argparse
+import termcolor
 
 
 class ChessPiece:
@@ -310,13 +311,17 @@ def print_board(board):
     ranks = "87654321"
     files = "abcdefgh"
     cp = ChessPiece
+    tcc = termcolor.colored
     for r in ranks:
         print(f"{r} ", end="")
         for f in files:
+            index = ord(r) - ord("1") + ord(f) - ord("a")
+            colors = {0: ("grey", "on_red"), 1: ("grey", "on_white")}[index % 2]
             # print(f"{f}{r}", end='')
-            print(getattr(cp, board[f"{f}{r}"]), end="")
+            char = getattr(cp, board[f"{f}{r}"])
+            print(tcc(f" {char} ", *colors), end="")
         print("\n", end="")
-    print(f"  {files}")
+    print(f"   {'  '.join(files)}")
 
 
 class PgnGame:
@@ -401,7 +406,7 @@ def random_game():
         print(f"{who} to move; move #{len(board.history)+1}")
         import time
 
-        # time.sleep(.25)
+        time.sleep(3)
 
         import random
 
