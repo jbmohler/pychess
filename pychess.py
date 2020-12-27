@@ -385,7 +385,7 @@ def play_pgn_game(game):
         board = board.make_move(move)
 
 
-def random_game():
+def interactive_game(white_func, black_func):
     board = Board.default_board()
     while True:
         print_board(board)
@@ -403,18 +403,31 @@ def random_game():
             print("game over; draw -- 2 kings")
             break
 
-        print(f"{who} to move; move #{len(board.history)+1}")
-        import time
+        print(f"{who} to move; move #{len(board.history)//2+1}")
 
-        time.sleep(3)
-
-        import random
-
-        # for from_, to_ in board.legal_moves():
-        #    print(from_, to_)
-        move = random.choice(moves)
+        func = {"w": white_func, "b": black_func}[board.who()]
+        move = func(board)
 
         board = board.make_move(move)
+
+
+def ai_play(board):
+    import random
+    import time
+
+    time.sleep(2)
+
+    moves = list(board.legal_moves())
+    return random.choice(moves)
+
+
+def console_play(board):
+    while True:
+        pgn = input("Input move:  ")
+        try:
+            return board.interpret(board.who(), pgn)
+        except InterpretationError as e:
+            print(e)
 
 
 if __name__ == "__main__":
@@ -428,4 +441,4 @@ if __name__ == "__main__":
 
         play_pgn_game(games[int(args.game) - 1])
     else:
-        random_game()
+        interactive_game(ai_play, console_play)
