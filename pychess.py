@@ -31,24 +31,27 @@ class Delta:
     i2f = {i: chr(i + ord("a")) for i in range(8)}
     i2r = {i: chr(i + ord("1")) for i in range(8)}
 
+    __slots__ = ["df", "dr"]
+
     def __init__(self, df, dr):
-        self._t = (df, dr)
+        self.df = df
+        self.dr = dr
 
     def __mul__(self, mult):
-        return Delta(self._t[0] * mult, self._t[1] * mult)
+        return Delta(self.df * mult, self.dr * mult)
 
     def __repr__(self):
-        return f"Delta{self._t}"
+        return f"Delta({self.df}, {self.dr})"
 
     def from_(self, spot):
         f, r = Delta.f2i[spot[0]], Delta.r2i[spot[1]]
         # assert 0 <= f < 8 and 0 <= r < 8
-        f += self._t[0]
-        r += self._t[1]
+        f += self.df
+        r += self.dr
         if 0 <= f < 8 and 0 <= r < 8:
             return f"{Delta.i2f[f]}{Delta.i2r[r]}"
         else:
-            raise IndexError(f"{spot} offset {self._t} is out of bounds")
+            raise IndexError(f"{spot} offset ({self.df}, {self.dr}) is out of bounds")
 
 
 class Board:
@@ -118,6 +121,48 @@ class Board:
                         yield (*candidate, promote)
                 else:
                     yield candidate
+
+    def _attacked_positions(self, who):
+        d_straight = [Delta(0, 1), Delta(1, 0)]
+        d_straight = [s for s in d_straight] + [s * -1 for s in d_straight]
+        d_diag = [Delta(1, 1), Delta(1, -1)]
+        d_diag = [s for s in d_diag] + [s * -1 for s in d_diag]
+        d_knight = [Delta(2, 1), Delta(2, -1), Delta(1, 2), Delta(-1, 2)]
+        d_knight = [s for s in d_knight] + [s * -1 for s in d_knight]
+
+        for spot, piece in self._positions(who):
+            if piece[1] == "p":
+                dr = {"b": -1, "w": 1}[piece[0]]
+                for df in (-1, 1):
+                    try:
+                        yield Delta(df, dr).from_(spot)
+                    except IndexError:
+                        continue
+            else:
+                dirs = {
+                    "r": d_straight,
+                    "b": d_diag,
+                    "q": d_straight + d_diag,
+                    "k": d_straight + d_diag,
+                    "n": d_knight,
+                }[piece[1]]
+                distance = 2 if piece[1] in "kn" else 8
+                for dd in dirs:
+                    for i in range(1, distance):
+                        offset = dd * i
+                        try:
+                            spot2 = offset.from_(spot)
+                        except IndexError:
+                            break
+                        if self[spot2] == "empty":
+                            yield spot2
+                        elif self[spot2][0] == Board.other(who):
+                            yield spot2
+                            break
+                        elif self[spot2][0] == who:
+                            break
+                        else:
+                            raise RuntimeError("unexpected element")
 
     def _positional_moves(self, who=None, attacking=None):
         if who:
@@ -271,6 +316,9 @@ class Board:
                 "([RNBQK]|)([a-h]?[0-8]?)(x|)([a-h][1-8])(=[QRNB]|)([+!?]*)", pgn
             )
 
+            if not m:
+                raise InterpretationError(f"invalid pgn ply {pgn}")
+
             ptype = m.group(1)
             spot1 = m.group(2)  # possibly empty
             capture = m.group(3)
@@ -389,6 +437,8 @@ def interactive_game(white_func, black_func):
     board = Board.default_board()
     while True:
         print_board(board)
+        print(f"white:  {weight_board(board, 'w')}")
+        print(f"black:  {weight_board(board, 'b')}")
 
         who = {"w": "white", "b": "black"}[board.who()]
         moves = list(board.legal_moves())
@@ -411,11 +461,66 @@ def interactive_game(white_func, black_func):
         board = board.make_move(move)
 
 
-def ai_play(board):
+def random_ai(board):
     import random
     import time
 
     time.sleep(2)
+
+    moves = list(board.legal_moves())
+    return random.choice(moves)
+
+
+def deeplook(board, depth):
+    for move in board.legal_moves():
+        boar2 = board.make_move(move)
+        if depth > 1:
+            yield from deeplook(boar2, depth - 1)
+        else:
+            yield boar2
+
+
+def spot_delta(sp1, sp2):
+    return Delta(ord(sp1[0]) - ord(sp2[0]), ord(sp1[1]) - ord(sp2[1]))
+
+
+def manhattan(delta):
+    return abs(delta.df) + abs(delta.dr)
+
+
+def mid_delta(sp):
+    return min(manhattan(spot_delta(sp, center)) for center in ["d4", "d5", "e4", "e5"])
+
+
+position_weights = {
+    f"{f}{r}": 10 - mid_delta(f"{f}{r}") for f in "abcdefgh" for r in "12345678"
+}
+
+
+def weight_board(board, who):
+    global position_weights
+    return sum(position_weights[spot] for spot in board._attacked_positions(who))
+
+
+def coverage_ai(board):
+    who = board.who()
+    other = Board.other(who)
+    who_base = weight_board(board, who)
+    best_results = {}
+    for move in board.legal_moves():
+        detail = []
+        otherboard = board.make_move(move)
+        other_base = weight_board(otherboard, other)
+        for depth3 in deeplook(otherboard, 3):
+            # maximize: (detail*[1] - who_base - (other_base - detail*[2]))
+            who_depth, other_depth = weight_board(depth3, who), weight_board(
+                depth3, other
+            )
+            detail.append(who_depth - who_base - (other_base - other_depth))
+        best_results[move] = max(detail)
+
+    return sorted(best_results.items(), key=lambda x: -x[1])[0][0]
+    import random
 
     moves = list(board.legal_moves())
     return random.choice(moves)
@@ -441,4 +546,4 @@ if __name__ == "__main__":
 
         play_pgn_game(games[int(args.game) - 1])
     else:
-        interactive_game(ai_play, console_play)
+        interactive_game(coverage_ai, console_play)
